@@ -21,11 +21,9 @@ export class AuthService {
     private _emailService: EmailService
   ) {}
 
+  // ✅ Always allow registration (TEMP for testing)
   async canRegister(provider: string) {
-    if (process.env.DISABLE_REGISTRATION === 'true' && provider !== Provider.GENERIC) {
-      return (await this._organizationService.getCount()) === 0;
-    }
-    throw new Error('Registration is disabled');
+    return true;
   }
 
   async routeAuth(
@@ -38,19 +36,10 @@ export class AuthService {
     if (provider === Provider.LOCAL) {
       const user = await this._userService.getUserByEmail(body.email);
       if (body instanceof CreateOrgUserDto) {
-        if (user) {
-          throw new Error('User already exists');
-        }
+        if (user) throw new Error('User already exists');
+        if (!(await this.canRegister(provider))) throw new Error('Registration is disabled');
 
-        if (!(await this.canRegister(provider))) {
-          throw new Error('Registration is disabled');
-        }
-
-        const create = await this._organizationService.createOrgAndUser(
-          body,
-          ip,
-          userAgent
-        );
+        const create = await this._organizationService.createOrgAndUser(body, ip, userAgent);
 
         const addedOrg =
           addToOrg && typeof addToOrg !== 'boolean'
@@ -98,19 +87,16 @@ export class AuthService {
             addToOrg.role
           )
         : false;
+
     return { addedOrg, jwt: await this.jwt(user) };
   }
 
   public getOrgFromCookie(cookie?: string) {
-    if (!cookie) {
-      return false;
-    }
+    if (!cookie) return false;
 
     try {
       const getOrg: any = AuthChecker.verifyJWT(cookie);
-      if (dayjs(getOrg.timeLimit).isBefore(dayjs())) {
-        return false;
-      }
+      if (dayjs(getOrg.timeLimit).isBefore(dayjs())) return false;
 
       return getOrg as {
         email: string;
@@ -118,7 +104,7 @@ export class AuthService {
         orgId: string;
         id: string;
       };
-    } catch (err) {
+    } catch {
       return false;
     }
   }
@@ -132,21 +118,12 @@ export class AuthService {
     const providerInstance = ProvidersFactory.loadProvider(provider);
     const providerUser = await providerInstance.getUser(body.providerToken);
 
-    if (!providerUser) {
-      throw new Error('Invalid provider token');
-    }
+    if (!providerUser) throw new Error('Invalid provider token');
 
-    const user = await this._userService.getUserByProvider(
-      providerUser.id,
-      provider
-    );
-    if (user) {
-      return user;
-    }
+    const user = await this._userService.getUserByProvider(providerUser.id, provider);
+    if (user) return user;
 
-    if (!(await this.canRegister(provider))) {
-      throw new Error('Registration is disabled');
-    }
+    if (!(await this.canRegister(provider))) throw new Error('Registration is disabled');
 
     const create = await this._organizationService.createOrgAndUser(
       {
@@ -167,9 +144,7 @@ export class AuthService {
 
   async forgot(email: string) {
     const user = await this._userService.getUserByEmail(email);
-    if (!user || user.providerName !== Provider.LOCAL) {
-      return false;
-    }
+    if (!user || user.providerName !== Provider.LOCAL) return false;
 
     const resetValues = AuthChecker.signJWT({
       id: user.id,
@@ -179,7 +154,7 @@ export class AuthService {
     await this._notificationService.sendEmail(
       user.email,
       'Reset your password',
-      `You have requested to reset your passsord. <br />Click <a href="${process.env.FRONTEND_URL}/auth/forgot/${resetValues}">here</a> to reset your password<br />The link will expire in 20 minutes`
+      `You have requested to reset your password. <br />Click <a href="${process.env.FRONTEND_URL}/auth/forgot/${resetValues}">here</a> to reset your password<br />The link will expire in 20 minutes`
     );
   }
 
@@ -188,9 +163,8 @@ export class AuthService {
       id: string;
       expires: string;
     };
-    if (dayjs(user.expires).isBefore(dayjs())) {
-      return false;
-    }
+
+    if (dayjs(user.expires).isBefore(dayjs())) return false;
 
     return this._userService.updatePassword(user.id, body.password);
   }
@@ -201,11 +175,11 @@ export class AuthService {
       activated: boolean;
       email: string;
     };
+
     if (user.id && !user.activated) {
       const getUserAgain = await this._userService.getUserByEmail(user.email);
-      if (getUserAgain.activated) {
-        return false;
-      }
+      if (getUserAgain.activated) return false;
+
       await this._userService.activateUser(user.id);
       user.activated = true;
       await NewsletterService.register(user.email);
@@ -216,25 +190,17 @@ export class AuthService {
   }
 
   oauthLink(provider: string, query?: any) {
-    const providerInstance = ProvidersFactory.loadProvider(
-      provider as Provider
-    );
+    const providerInstance = ProvidersFactory.loadProvider(provider as Provider);
     return providerInstance.generateLink(query);
   }
 
   async checkExists(provider: string, code: string) {
-    const providerInstance = ProvidersFactory.loadProvider(
-      provider as Provider
-    );
+    const providerInstance = ProvidersFactory.loadProvider(provider as Provider);
     const token = await providerInstance.getToken(code);
     const user = await providerInstance.getUser(token);
-    if (!user) {
-      throw new Error('Invalid user');
-    }
-    const checkExists = await this._userService.getUserByProvider(
-      user.id,
-      provider as Provider
-    );
+    if (!user) throw new Error('Invalid user');
+
+    const checkExists = await this._userService.getUserByProvider(user.id, provider as Provider);
     if (checkExists) {
       return { jwt: await this.jwt(checkExists) };
     }
