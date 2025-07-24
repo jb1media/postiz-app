@@ -8,9 +8,9 @@ while ! nc -z localhost 4200; do
   sleep 1
 done
 
-# Wait for port 3000 to be open
-while ! nc -z localhost 3000; do
-  echo "Waiting for port 3000..."
+# Wait for port 5000 to be open
+while ! nc -z localhost 5000; do
+  echo "Waiting for port 5000..."
   sleep 1
 done
 
