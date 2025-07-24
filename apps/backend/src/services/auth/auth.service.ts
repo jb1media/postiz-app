@@ -20,12 +20,12 @@ export class AuthService {
     private _notificationService: NotificationService,
     private _emailService: EmailService
   ) {}
+
   async canRegister(provider: string) {
-    if (process.env.DISABLE_REGISTRATION !== 'true' || provider === Provider.GENERIC) {
+    if (process.env.DISABLE_REGISTRATION === 'true' && provider !== Provider.GENERIC) {
+      return (await this._organizationService.getCount()) === 0;
+    }
     throw new Error('Registration is disabled');
-
-
-    return (await this._organizationService.getCount()) === 0;
   }
 
   async routeAuth(
