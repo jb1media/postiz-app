@@ -25,4 +25,4 @@ RUN pnpm run build
 EXPOSE 5000
 
 # Starte NUR das Backend
-CMD ["pnpm", "--filter", "backend", "start"]
+CMD ["pnpm", "--filter", "postiz-backend", "start"]
